@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
-import { router } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
     Alert,
@@ -14,7 +13,7 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import MapView, { Circle } from 'react-native-maps';
+import MapView, { Circle, Marker, Polyline } from 'react-native-maps';
 
 const { width } = Dimensions.get('window');
 
@@ -26,10 +25,9 @@ interface RouteOption {
     safety: number;
     description: string;
     color: string;
-    path: any[];
 }
 
-interface LocationData {
+interface LocationRegion {
     latitude: number;
     longitude: number;
     latitudeDelta: number;
@@ -37,10 +35,10 @@ interface LocationData {
 }
 
 export default function MapScreen() {
-    const [location, setLocation] = useState<LocationData | null>(null);
+    const [location, setLocation] = useState<LocationRegion | null>(null);
     const [destination, setDestination] = useState('');
-    const [recentSearches, setRecentSearches] = useState([
-        'Home', 'Office', 'Gym', 'Mom\'s House'
+    const [recentSearches] = useState([
+        'Home', 'Office', 'Gym', 'Mom\'s House', 'Railway Station'
     ]);
     const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
     const [showRouteOptions, setShowRouteOptions] = useState(false);
@@ -58,7 +56,6 @@ export default function MapScreen() {
             safety: 94,
             description: 'Well-lit • Low crime area • Police patrolling',
             color: '#2ecc71',
-            path: []
         },
         {
             id: '2',
@@ -68,7 +65,6 @@ export default function MapScreen() {
             safety: 68,
             description: '⚠️ 2 unsafe zones • Poor lighting',
             color: '#f39c12',
-            path: []
         },
         {
             id: '3',
@@ -78,8 +74,22 @@ export default function MapScreen() {
             safety: 82,
             description: 'Park area • Moderate lighting',
             color: '#3498db',
-            path: []
         },
+    ];
+
+    // Mock crime hotspots
+    const crimeHotspots = [
+        { id: '1', lat: 19.0760, lng: 72.8777, severity: 0.9, type: 'Theft' },
+        { id: '2', lat: 19.0860, lng: 72.8877, severity: 0.6, type: 'Harassment' },
+        { id: '3', lat: 19.0660, lng: 72.8677, severity: 0.8, type: 'Robbery' },
+        { id: '4', lat: 19.0960, lng: 72.8977, severity: 0.4, type: 'Suspicious' },
+    ];
+
+    // Mock street lights (well-lit areas)
+    const wellLitAreas = [
+        { id: '1', lat: 19.0800, lng: 72.8820, radius: 150 },
+        { id: '2', lat: 19.0700, lng: 72.8720, radius: 200 },
+        { id: '3', lat: 19.0900, lng: 72.8920, radius: 100 },
     ];
 
     useEffect(() => {
@@ -125,7 +135,9 @@ export default function MapScreen() {
             `Starting ${route.name}. Safety score: ${route.safety}%`,
             [
                 { text: 'Cancel', style: 'cancel' },
-                { text: 'Start Navigation', onPress: () => router.push('/explore') }
+                { text: 'Start Navigation', onPress: () => 
+                    Alert.alert('Navigation', 'Starting navigation... (Demo)')
+                }
             ]
         );
     };
@@ -145,27 +157,61 @@ export default function MapScreen() {
                     initialRegion={location}
                     showsUserLocation={true}
                     showsMyLocationButton={true}
+                    showsCompass={true}
                 >
+                    {/* User location */}
+                    <Marker coordinate={location}>
+                        <View style={styles.userMarker}>
+                            <Text style={styles.userMarkerText}>📍</Text>
+                        </View>
+                    </Marker>
+
                     {/* Crime hotspots */}
-                    <Circle
-                        center={{ latitude: 19.0760, longitude: 72.8777 }}
-                        radius={200}
-                        strokeColor="rgba(231, 76, 60, 0.5)"
-                        fillColor="rgba(231, 76, 60, 0.2)"
+                    {crimeHotspots.map((crime) => (
+                        <Marker
+                            key={crime.id}
+                            coordinate={{ latitude: crime.lat, longitude: crime.lng }}
+                        >
+                            <View style={[styles.crimeMarker, { 
+                                backgroundColor: crime.severity > 0.7 ? '#e74c3c' : '#f39c12' 
+                            }]}>
+                                <Text style={styles.crimeEmoji}>⚠️</Text>
+                            </View>
+                        </Marker>
+                    ))}
+
+                    {/* Well-lit areas */}
+                    {wellLitAreas.map((area) => (
+                        <Circle
+                            key={area.id}
+                            center={{ latitude: area.lat, longitude: area.lng }}
+                            radius={area.radius}
+                            strokeColor="rgba(46, 204, 113, 0.5)"
+                            fillColor="rgba(46, 204, 113, 0.2)"
+                        />
+                    ))}
+
+                    {/* Sample safe route (green line) */}
+                    <Polyline
+                        coordinates={[
+                            { latitude: location.latitude, longitude: location.longitude },
+                            { latitude: location.latitude + 0.01, longitude: location.longitude + 0.01 },
+                            { latitude: location.latitude + 0.02, longitude: location.longitude + 0.015 },
+                        ]}
+                        strokeColor="#2ecc71"
+                        strokeWidth={5}
                     />
-                    <Circle
-                        center={{ latitude: 19.0860, longitude: 72.8877 }}
-                        radius={150}
-                        strokeColor="rgba(241, 196, 15, 0.5)"
-                        fillColor="rgba(241, 196, 15, 0.2)"
-                    />
-                    
-                    {/* Street lights (well-lit areas) */}
-                    <Circle
-                        center={{ latitude: 19.0800, longitude: 72.8820 }}
-                        radius={100}
-                        strokeColor="rgba(46, 204, 113, 0.5)"
-                        fillColor="rgba(46, 204, 113, 0.2)"
+
+                    {/* Sample unsafe route (red line) */}
+                    <Polyline
+                        coordinates={[
+                            { latitude: location.latitude, longitude: location.longitude },
+                            { latitude: location.latitude - 0.005, longitude: location.longitude - 0.01 },
+                            { latitude: location.latitude - 0.015, longitude: location.longitude - 0.02 },
+                        ]}
+                        strokeColor="#e74c3c"
+                        strokeWidth={4}
+                        lineDashPattern={[5, 5]}
                     />
                 </MapView>
             )}
@@ -193,7 +239,7 @@ export default function MapScreen() {
             {/* Recent Searches */}
             {!showRouteOptions && (
                 <View style={styles.recentContainer}>
-                    <Text style={styles.recentTitle}>Recent</Text>
+                    <Text style={styles.recentTitle}>Recent Places</Text>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         {recentSearches.map((item, index) => (
                             <TouchableOpacity
@@ -225,6 +271,10 @@ export default function MapScreen() {
                 <View style={styles.legendItem}>
                     <View style={[styles.legendDot, { backgroundColor: '#e74c3c' }]} />
                     <Text style={styles.legendText}>Avoid</Text>
+                </View>
+                <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: '#3498db' }]} />
+                    <Text style={styles.legendText}>Well-lit</Text>
                 </View>
             </View>
 
@@ -292,6 +342,14 @@ export default function MapScreen() {
                     </ScrollView>
                 </Animated.View>
             )}
+
+            {/* Current Location Button */}
+            <TouchableOpacity 
+                style={styles.locationButton}
+                onPress={getLocation}
+            >
+                <Ionicons name="locate" size={24} color="#e74c3c" />
+            </TouchableOpacity>
         </View>
     );
 }
@@ -377,20 +435,22 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 5,
         zIndex: 10,
+        flexWrap: 'wrap',
+        maxWidth: width - 40,
     },
     legendItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginHorizontal: 8,
-        gap: 5,
+        marginHorizontal: 6,
+        gap: 4,
     },
     legendDot: {
-        width: 12,
-        height: 12,
-        borderRadius: 6,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
     },
     legendText: {
-        fontSize: 12,
+        fontSize: 10,
         color: '#34495e',
     },
     routePanel: {
@@ -409,7 +469,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 8,
         elevation: 20,
-        maxHeight: '70%',
+        maxHeight: '60%',
     },
     panelHeader: {
         flexDirection: 'row',
@@ -491,5 +551,41 @@ const styles = StyleSheet.create({
     routePreviewText: {
         fontSize: 12,
         fontWeight: '600',
+    },
+    locationButton: {
+        position: 'absolute',
+        bottom: 90,
+        right: 20,
+        backgroundColor: 'white',
+        width: 50,
+        height: 50,
+        borderRadius: 25,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 5,
+        zIndex: 10,
+    },
+    userMarker: {
+        backgroundColor: '#3498db',
+        borderRadius: 20,
+        padding: 5,
+        borderWidth: 2,
+        borderColor: 'white',
+    },
+    userMarkerText: {
+        fontSize: 20,
+    },
+    crimeMarker: {
+        borderRadius: 15,
+        padding: 5,
+        borderWidth: 2,
+        borderColor: 'white',
+    },
+    crimeEmoji: {
+        fontSize: 14,
     },
 });
