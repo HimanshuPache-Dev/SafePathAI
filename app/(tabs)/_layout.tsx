@@ -1,8 +1,8 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -15,19 +15,83 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarStyle: {
+          backgroundColor: colorScheme === 'dark' ? '#1a1a2e' : 'white',
+          borderTopWidth: 1,
+          borderTopColor: colorScheme === 'dark' ? '#2a2a3a' : '#ecf0f1',
+          height: 60,
+          paddingBottom: 5,
+          paddingTop: 5,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '500',
+        },
       }}>
+      
+      {/* Home Tab */}
       <Tabs.Screen
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons 
+              name={focused ? "home" : "home-outline"} 
+              size={24} 
+              color={color} 
+            />
+          ),
         }}
       />
+      
+      {/* Map Tab */}
       <Tabs.Screen
-        name="explore"
+        name="map"
         options={{
-          title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          title: 'Map',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons 
+              name={focused ? "map" : "map-outline"} 
+              size={24} 
+              color={color} 
+            />
+          ),
+        }}
+      />
+      
+      {/* SOS Tab */}
+      <Tabs.Screen
+        name="sos"
+        options={{
+          title: 'SOS',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons 
+              name={focused ? "alert-circle" : "alert-circle-outline"} 
+              size={24} 
+              color={color} 
+            />
+          ),
+          tabBarBadge: '!',
+          tabBarBadgeStyle: {
+            backgroundColor: '#e74c3c',
+            color: 'white',
+            fontSize: 10,
+          },
+        }}
+      />
+      
+      {/* Privacy Tab */}
+      <Tabs.Screen
+        name="privacy"
+        options={{
+          title: 'Privacy',
+          tabBarIcon: ({ color, focused }) => (
+            <Ionicons 
+              name={focused ? "shield" : "shield-outline"} 
+              size={24} 
+              color={color} 
+            />
+          ),
         }}
       />
     </Tabs>
