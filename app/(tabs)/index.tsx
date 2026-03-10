@@ -1,21 +1,32 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    ScrollView,
-    Dimensions,
-    Animated,
-    Vibration,
-    Alert
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import MapView, { Marker } from 'react-native-maps';
-import * as Location from 'expo-location';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
+import { router } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Alert,
+  Animated,
+  Dimensions,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  Vibration,
+  View
+} from 'react-native';
+
+// Only import MapView on native platforms
+let MapView: any = null;
+let Marker: any = null;
+if (Platform.OS !== 'web') {
+    MapView = require('react-native-maps').default;
+    Marker = require('react-native-maps').Marker;
+}
+
+// Import web fallback
+import MapWebFallback from '@/components/MapWebFallback';
 
 const { width } = Dimensions.get('window');
 
@@ -216,36 +227,40 @@ export default function HomeScreen() {
                 </View>
             </View>
 
-            {/* Map Preview */}
+            {/* Map Preview - WITH WEB FALLBACK */}
             <View style={styles.mapPreviewContainer}>
                 <Text style={styles.sectionTitle}>Nearby Safety</Text>
                 <View style={styles.mapPreview}>
-                    {location ? (
-                        <MapView
-                            style={styles.miniMap}
-                            initialRegion={{
-                                latitude: location.latitude,
-                                longitude: location.longitude,
-                                latitudeDelta: 0.01,
-                                longitudeDelta: 0.01,
-                            }}
-                            scrollEnabled={false}
-                            zoomEnabled={false}
-                        >
-                            <Marker coordinate={location}>
-                                <View style={styles.userMarker}>
-                                    <Text style={styles.userMarkerText}>📍</Text>
-                                </View>
-                            </Marker>
-                        </MapView>
+                    {Platform.OS === 'web' ? (
+                        <MapWebFallback />
                     ) : (
-                        <View style={styles.mapPlaceholder}>
-                            <Ionicons name="map-outline" size={40} color="#7f8c8d" />
-                            <Text style={styles.mapPlaceholderText}>Loading map...</Text>
-                        </View>
+                        location && MapView && Marker ? (
+                            <MapView
+                                style={styles.miniMap}
+                                initialRegion={{
+                                    latitude: location.latitude,
+                                    longitude: location.longitude,
+                                    latitudeDelta: 0.01,
+                                    longitudeDelta: 0.01,
+                                }}
+                                scrollEnabled={false}
+                                zoomEnabled={false}
+                            >
+                                <Marker coordinate={location}>
+                                    <View style={styles.userMarker}>
+                                        <Text style={styles.userMarkerText}>📍</Text>
+                                    </View>
+                                </Marker>
+                            </MapView>
+                        ) : (
+                            <View style={styles.mapPlaceholder}>
+                                <Ionicons name="map-outline" size={40} color="#7f8c8d" />
+                                <Text style={styles.mapPlaceholderText}>Loading map...</Text>
+                            </View>
+                        )
                     )}
 
-                    {/* Nearby Places List */}
+                    {/* Nearby Places List (always shown) */}
                     <View style={styles.nearbyList}>
                         {nearbyPlaces.map((place) => (
                             <View key={place.id} style={styles.nearbyItem}>

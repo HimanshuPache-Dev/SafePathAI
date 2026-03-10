@@ -1,3 +1,4 @@
+import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Contacts from 'expo-contacts';
@@ -30,28 +31,160 @@ export default function ContactsScreen() {
     const [phoneContacts, setPhoneContacts] = useState<any[]>([]);
     const [newContact, setNewContact] = useState({ name: '', phone: '', relationship: '' });
     const [loading, setLoading] = useState(false);
+    const [userId, setUserId] = useState<string | null>(null);
 
     useEffect(() => {
-        loadContacts();
+        getUserAndLoadContacts();
     }, []);
 
-    const loadContacts = async () => {
+    const getUserAndLoadContacts = async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                setUserId(user.id);
+                loadContacts(user.id);
+            } else {
+                // Fallback to AsyncStorage if not logged in
+                loadLocalContacts();
+            }
+        } catch (error) {
+            console.log('Error getting user:', error);
+            loadLocalContacts();
+        }
+    };
+
+    const loadContacts = async (uid: string) => {
+        try {
+            const { data, error } = await supabase
+                .from('emergency_contacts')
+                .select('*')
+                .eq('user_id', uid)
+                .order('created_at', { ascending: false });
+            
+            if (error) throw error;
+            
+            if (data && data.length > 0) {
+                // Convert from Supabase format to app format
+                const formattedContacts = data.map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    phone: item.phone,
+                    relationship: item.relationship || '',
+                    isPrimary: item.is_primary
+                }));
+                setEmergencyContacts(formattedContacts);
+                
+                // Also save to AsyncStorage for offline
+                await AsyncStorage.setItem('emergencyContacts', JSON.stringify(formattedContacts));
+            } else {
+                // Try loading from AsyncStorage
+                loadLocalContacts();
+            }
+        } catch (error) {
+            console.log('Error loading contacts:', error);
+            loadLocalContacts();
+        }
+    };
+
+    const loadLocalContacts = async () => {
         try {
             const saved = await AsyncStorage.getItem('emergencyContacts');
             if (saved) {
                 setEmergencyContacts(JSON.parse(saved));
             }
         } catch (error) {
-            console.log('Error loading contacts');
+            console.log('Error loading local contacts');
         }
     };
 
-    const saveContacts = async (contacts: Contact[]) => {
+    const saveContact = async (contact: Contact) => {
         try {
-            await AsyncStorage.setItem('emergencyContacts', JSON.stringify(contacts));
-            setEmergencyContacts(contacts);
+            // Save to Supabase if logged in
+            if (userId) {
+                const { data, error } = await supabase
+                    .from('emergency_contacts')
+                    .insert([{
+                        user_id: userId,
+                        name: contact.name,
+                        phone: contact.phone,
+                        relationship: contact.relationship,
+                        is_primary: contact.isPrimary
+                    }])
+                    .select();
+                
+                if (error) throw error;
+                
+                if (data && data[0]) {
+                    contact.id = data[0].id;
+                }
+            }
+            
+            // Update local state
+            const updated = [...emergencyContacts, contact];
+            setEmergencyContacts(updated);
+            
+            // Save to AsyncStorage as backup
+            await AsyncStorage.setItem('emergencyContacts', JSON.stringify(updated));
+            
         } catch (error) {
-            console.log('Error saving contacts');
+            console.log('Error saving contact:', error);
+            throw error;
+        }
+    };
+
+    const deleteContact = async (id: string) => {
+        try {
+            // Delete from Supabase if logged in
+            if (userId) {
+                const { error } = await supabase
+                    .from('emergency_contacts')
+                    .delete()
+                    .eq('id', id);
+                
+                if (error) throw error;
+            }
+            
+            // Update local state
+            const updated = emergencyContacts.filter(c => c.id !== id);
+            setEmergencyContacts(updated);
+            
+            // Update AsyncStorage
+            await AsyncStorage.setItem('emergencyContacts', JSON.stringify(updated));
+            
+        } catch (error) {
+            console.log('Error deleting contact:', error);
+        }
+    };
+
+    const setPrimaryContact = async (id: string) => {
+        try {
+            // Update all contacts to not primary, then set selected as primary
+            const updated = emergencyContacts.map(c => ({
+                ...c,
+                isPrimary: c.id === id
+            }));
+            
+            // Update in Supabase if logged in
+            if (userId) {
+                // First, set all to false
+                await supabase
+                    .from('emergency_contacts')
+                    .update({ is_primary: false })
+                    .eq('user_id', userId);
+                
+                // Then set selected to true
+                await supabase
+                    .from('emergency_contacts')
+                    .update({ is_primary: true })
+                    .eq('id', id);
+            }
+            
+            setEmergencyContacts(updated);
+            await AsyncStorage.setItem('emergencyContacts', JSON.stringify(updated));
+            Alert.alert('Success', 'Primary contact updated');
+            
+        } catch (error) {
+            console.log('Error updating primary contact:', error);
         }
     };
 
@@ -65,7 +198,6 @@ export default function ContactsScreen() {
                 });
 
                 if (data.length > 0) {
-                    // Filter contacts with phone numbers
                     const contactsWithPhone = data.filter(
                         contact => contact.phoneNumbers && contact.phoneNumbers.length > 0
                     );
@@ -85,7 +217,7 @@ export default function ContactsScreen() {
     };
 
     const selectPhoneContact = (contact: any) => {
-        const phoneNumber = contact.phoneNumbers[0]?.number || '';
+        const phoneNumber = contact.phoneNumbers?.[0]?.number || '';
         setNewContact({
             name: contact.name || '',
             phone: phoneNumber,
@@ -95,7 +227,7 @@ export default function ContactsScreen() {
         setShowAddModal(true);
     };
 
-    const addContact = () => {
+    const addContact = async () => {
         if (!newContact.name || !newContact.phone) {
             Alert.alert('Error', 'Name and phone are required');
             return;
@@ -106,41 +238,14 @@ export default function ContactsScreen() {
             name: newContact.name,
             phone: newContact.phone,
             relationship: newContact.relationship || 'Not specified',
-            isPrimary: emergencyContacts.length === 0 // First contact is primary
+            isPrimary: emergencyContacts.length === 0
         };
 
-        const updated = [...emergencyContacts, contact];
-        saveContacts(updated);
+        await saveContact(contact);
+        
         setNewContact({ name: '', phone: '', relationship: '' });
         setShowAddModal(false);
         Alert.alert('Success', 'Contact added successfully');
-    };
-
-    const deleteContact = (id: string) => {
-        Alert.alert(
-            'Delete Contact',
-            'Are you sure you want to delete this contact?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: () => {
-                        const updated = emergencyContacts.filter(c => c.id !== id);
-                        saveContacts(updated);
-                    }
-                }
-            ]
-        );
-    };
-
-    const setPrimaryContact = (id: string) => {
-        const updated = emergencyContacts.map(c => ({
-            ...c,
-            isPrimary: c.id === id
-        }));
-        saveContacts(updated);
-        Alert.alert('Success', 'Primary contact updated');
     };
 
     return (
@@ -155,7 +260,7 @@ export default function ContactsScreen() {
                 </Text>
             </LinearGradient>
 
-            <ScrollView style={styles.content}>
+            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
                 {emergencyContacts.length === 0 ? (
                     <View style={styles.emptyState}>
                         <Ionicons name="people-outline" size={60} color="#bdc3c7" />
@@ -181,7 +286,16 @@ export default function ContactsScreen() {
                                     <Text style={styles.contactRelation}>{contact.relationship}</Text>
                                 </View>
                                 <TouchableOpacity
-                                    onPress={() => deleteContact(contact.id)}
+                                    onPress={() => {
+                                        Alert.alert(
+                                            'Delete Contact',
+                                            'Are you sure?',
+                                            [
+                                                { text: 'Cancel', style: 'cancel' },
+                                                { text: 'Delete', style: 'destructive', onPress: () => deleteContact(contact.id) }
+                                            ]
+                                        );
+                                    }}
                                     style={styles.deleteButton}
                                 >
                                     <Ionicons name="trash-outline" size={22} color="#e74c3c" />
@@ -210,11 +324,7 @@ export default function ContactsScreen() {
             </ScrollView>
 
             {/* Add Contact Modal */}
-            <Modal
-                visible={showAddModal}
-                animationType="slide"
-                transparent={true}
-            >
+            <Modal visible={showAddModal} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <View style={styles.modalHeader}>
@@ -240,12 +350,14 @@ export default function ContactsScreen() {
                         <TextInput
                             style={styles.input}
                             placeholder="Name *"
+                            placeholderTextColor="#95a5a6"
                             value={newContact.name}
                             onChangeText={(text) => setNewContact({...newContact, name: text})}
                         />
                         <TextInput
                             style={styles.input}
                             placeholder="Phone Number *"
+                            placeholderTextColor="#95a5a6"
                             value={newContact.phone}
                             onChangeText={(text) => setNewContact({...newContact, phone: text})}
                             keyboardType="phone-pad"
@@ -253,6 +365,7 @@ export default function ContactsScreen() {
                         <TextInput
                             style={styles.input}
                             placeholder="Relationship (e.g., Mother, Friend)"
+                            placeholderTextColor="#95a5a6"
                             value={newContact.relationship}
                             onChangeText={(text) => setNewContact({...newContact, relationship: text})}
                         />
@@ -276,11 +389,7 @@ export default function ContactsScreen() {
             </Modal>
 
             {/* Phone Contacts Picker Modal */}
-            <Modal
-                visible={showPhonePicker}
-                animationType="slide"
-                transparent={true}
-            >
+            <Modal visible={showPhonePicker} transparent animationType="slide">
                 <View style={styles.modalOverlay}>
                     <View style={[styles.modalContent, { height: '80%' }]}>
                         <View style={styles.modalHeader}>

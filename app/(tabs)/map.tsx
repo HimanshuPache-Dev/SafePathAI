@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import React, { useEffect, useRef, useState } from 'react';
 import {
+    ActivityIndicator,
     Alert,
-    Animated,
     Dimensions,
     ScrollView,
     StyleSheet,
@@ -13,84 +12,25 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import MapView, { Circle, Marker, Polyline } from 'react-native-maps';
+import MapView, { Marker, Polyline, PROVIDER_DEFAULT, UrlTile } from 'react-native-maps';
 
 const { width } = Dimensions.get('window');
 
-interface RouteOption {
-    id: string;
-    name: string;
-    distance: string;
-    time: string;
-    safety: number;
-    description: string;
-    color: string;
-}
-
-interface LocationRegion {
-    latitude: number;
-    longitude: number;
-    latitudeDelta: number;
-    longitudeDelta: number;
-}
+// YOUR API KEYS
+const STADIA_API_KEY = 'b2c75e9c-f1b8-4a43-a013-1b56c3380c33';
+const GRAPHOPPER_KEY = 'cac51b20-68ba-4a68-91df-5aac39630d50';
 
 export default function MapScreen() {
-    const [location, setLocation] = useState<LocationRegion | null>(null);
+    const mapRef = useRef(null);
+    const [location, setLocation] = useState(null);
     const [destination, setDestination] = useState('');
-    const [recentSearches] = useState([
-        'Home', 'Office', 'Gym', 'Mom\'s House', 'Railway Station'
-    ]);
-    const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
-    const [showRouteOptions, setShowRouteOptions] = useState(false);
-    
-    // Animation
-    const slideAnim = useRef(new Animated.Value(0)).current;
-
-    // Mock route options
-    const routeOptions: RouteOption[] = [
-        {
-            id: '1',
-            name: '🌟 SAFEST ROUTE',
-            distance: '2.4 km',
-            time: '32 mins',
-            safety: 94,
-            description: 'Well-lit • Low crime area • Police patrolling',
-            color: '#2ecc71',
-        },
-        {
-            id: '2',
-            name: '⚡ FASTEST ROUTE',
-            distance: '1.8 km',
-            time: '22 mins',
-            safety: 68,
-            description: '⚠️ 2 unsafe zones • Poor lighting',
-            color: '#f39c12',
-        },
-        {
-            id: '3',
-            name: '🚶 SCENIC ROUTE',
-            distance: '3.1 km',
-            time: '40 mins',
-            safety: 82,
-            description: 'Park area • Moderate lighting',
-            color: '#3498db',
-        },
-    ];
-
-    // Mock crime hotspots
-    const crimeHotspots = [
-        { id: '1', lat: 19.0760, lng: 72.8777, severity: 0.9, type: 'Theft' },
-        { id: '2', lat: 19.0860, lng: 72.8877, severity: 0.6, type: 'Harassment' },
-        { id: '3', lat: 19.0660, lng: 72.8677, severity: 0.8, type: 'Robbery' },
-        { id: '4', lat: 19.0960, lng: 72.8977, severity: 0.4, type: 'Suspicious' },
-    ];
-
-    // Mock street lights (well-lit areas)
-    const wellLitAreas = [
-        { id: '1', lat: 19.0800, lng: 72.8820, radius: 150 },
-        { id: '2', lat: 19.0700, lng: 72.8720, radius: 200 },
-        { id: '3', lat: 19.0900, lng: 72.8920, radius: 100 },
-    ];
+    const [searchResults, setSearchResults] = useState([]);
+    const [selectedDestination, setSelectedDestination] = useState(null);
+    const [routeCoordinates, setRouteCoordinates] = useState([]);
+    const [distance, setDistance] = useState('');
+    const [duration, setDuration] = useState('');
+    const [showSearch, setShowSearch] = useState(false);
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         getLocation();
@@ -99,121 +39,207 @@ export default function MapScreen() {
     const getLocation = async () => {
         try {
             const { status } = await Location.requestForegroundPermissionsAsync();
-            if (status === 'granted') {
-                const loc = await Location.getCurrentPositionAsync({});
-                setLocation({
-                    latitude: loc.coords.latitude,
-                    longitude: loc.coords.longitude,
-                    latitudeDelta: 0.0922,
-                    longitudeDelta: 0.0421,
-                });
+            if (status !== 'granted') {
+                Alert.alert('Permission Denied', 'Location permission is required');
+                return;
             }
+            
+            const loc = await Location.getCurrentPositionAsync({});
+            setLocation({
+                latitude: loc.coords.latitude,
+                longitude: loc.coords.longitude,
+                latitudeDelta: 0.0922,
+                longitudeDelta: 0.0421,
+            });
         } catch (error) {
-            console.log('Location error:', error);
+            console.log('Location error');
         }
     };
 
-    const handleSearch = () => {
-        if (!destination.trim()) {
-            Alert.alert('Error', 'Please enter a destination');
+    // Search for locations using Nominatim
+    const searchLocation = async (text) => {
+        setDestination(text);
+        if (text.length < 3) {
+            setSearchResults([]);
             return;
         }
-        
-        setShowRouteOptions(true);
-        Animated.spring(slideAnim, {
-            toValue: 1,
-            useNativeDriver: true,
-            tension: 50,
-            friction: 7,
-        }).start();
-    };
 
-    const selectRoute = (route: RouteOption) => {
-        setSelectedRoute(route.id);
-        Alert.alert(
-            'Route Selected',
-            `Starting ${route.name}. Safety score: ${route.safety}%`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Start Navigation', onPress: () => 
-                    Alert.alert('Navigation', 'Starting navigation... (Demo)')
+        try {
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(text)}&format=json&limit=5`,
+                {
+                    headers: {
+                        'User-Agent': 'SafePathAI/1.0'
+                    }
                 }
-            ]
-        );
+            );
+            
+            if (!response.ok) {
+                return;
+            }
+            
+            const data = await response.json();
+            setSearchResults(data);
+            setShowSearch(true);
+        } catch (error) {
+            console.log('Search error:', error);
+        }
     };
 
-    const getSafetyColor = (score: number) => {
-        if (score >= 80) return '#2ecc71';
-        if (score >= 60) return '#f39c12';
-        return '#e74c3c';
+    // Select a location from search results
+    const selectLocation = async (item) => {
+        setDestination(item.display_name);
+        setSearchResults([]);
+        setShowSearch(false);
+        setLoading(true);
+        
+        const destLoc = {
+            latitude: parseFloat(item.lat),
+            longitude: parseFloat(item.lon),
+        };
+        setSelectedDestination(destLoc);
+        
+        // Calculate route if we have current location
+        if (location) {
+            await calculateRouteWithGraphHopper(location, destLoc);
+        }
+        setLoading(false);
     };
+
+    // Calculate route using GraphHopper (WITH YOUR API KEY)
+    const calculateRouteWithGraphHopper = async (start, end) => {
+        try {
+            console.log('Calculating route with GraphHopper...');
+            
+            const response = await fetch(
+                `https://graphhopper.com/api/1/route?` +
+                `point=${start.latitude},${start.longitude}&` +
+                `point=${end.latitude},${end.longitude}&` +
+                `vehicle=foot&` + // Use 'foot' for walking routes (safety app)
+                `locale=en&` +
+                `key=${GRAPHOPPER_KEY}&` +
+                `points_encoded=false&` +
+                `instructions=false`
+            );
+            
+            const data = await response.json();
+            console.log('GraphHopper response:', data);
+            
+            if (data.paths && data.paths.length > 0) {
+                const route = data.paths[0];
+                // GraphHopper returns [lng, lat] coordinates
+                const points = route.points.coordinates.map(coord => ({
+                    latitude: coord[1],
+                    longitude: coord[0]
+                }));
+                
+                setRouteCoordinates(points);
+                
+                // Convert distance from meters to km
+                const distanceKm = (route.distance / 1000).toFixed(1);
+                // Convert time from seconds to minutes
+                const durationMin = Math.round(route.time / 60000);
+                
+                setDistance(`${distanceKm} km`);
+                setDuration(`${durationMin} min`);
+                
+                console.log(`Route found: ${distanceKm}km, ${durationMin}min`);
+            } else {
+                Alert.alert('Error', 'No route found between these locations');
+            }
+        } catch (error) {
+            console.log('Route error:', error);
+            Alert.alert('Error', 'Could not calculate route. Using straight line instead.');
+            
+            // Fallback to straight line
+            setRouteCoordinates([start, end]);
+            
+            // Calculate approximate straight-line distance
+            const R = 6371;
+            const dLat = (end.latitude - start.latitude) * Math.PI / 180;
+            const dLon = (end.longitude - start.longitude) * Math.PI / 180;
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(start.latitude * Math.PI / 180) * Math.cos(end.latitude * Math.PI / 180) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const distance = (R * c).toFixed(1);
+            
+            setDistance(`${distance} km`);
+            setDuration(`${Math.round(distance * 12)} min`);
+        }
+    };
+
+    // Clear route
+    const clearRoute = () => {
+        setDestination('');
+        setSearchResults([]);
+        setSelectedDestination(null);
+        setRouteCoordinates([]);
+        setDistance('');
+        setDuration('');
+    };
+
+    if (!location) {
+        return (
+            <View style={styles.centerContainer}>
+                <ActivityIndicator size="large" color="#e74c3c" />
+                <Text style={styles.loadingText}>Loading map...</Text>
+            </View>
+        );
+    }
 
     return (
         <View style={styles.container}>
-            {/* Map View */}
-            {location && (
-                <MapView
-                    style={styles.map}
-                    initialRegion={location}
-                    showsUserLocation={true}
-                    showsMyLocationButton={true}
-                    showsCompass={true}
-                >
-                    {/* User location */}
-                    <Marker coordinate={location}>
-                        <View style={styles.userMarker}>
-                            <Text style={styles.userMarkerText}>📍</Text>
+            {/* Map */}
+            <MapView
+             ref={mapRef} 
+                style={styles.map}
+                initialRegion={location}
+                showsUserLocation={true}
+                showsMyLocationButton={true}
+                provider={PROVIDER_DEFAULT}
+            >
+                {/* Stadia Maps Tiles */}
+                <UrlTile
+                    urlTemplate={`https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}.png?api_key=${STADIA_API_KEY}`}
+                    maximumZ={20}
+                    tileSize={256}
+                    shouldReplaceMapContent={true}
+                />
+                
+                {/* Current Location Marker */}
+                <Marker coordinate={location}>
+                    <View style={[styles.marker, { backgroundColor: '#3498db' }]}>
+                        <Text style={styles.markerText}>📍</Text>
+                    </View>
+                </Marker>
+
+                {/* Destination Marker */}
+                {selectedDestination && (
+                    <Marker coordinate={selectedDestination}>
+                        <View style={[styles.marker, { backgroundColor: '#e74c3c' }]}>
+                            <Text style={styles.markerText}>🏁</Text>
                         </View>
                     </Marker>
+                )}
 
-                    {/* Crime hotspots */}
-                    {crimeHotspots.map((crime) => (
-                        <Marker
-                            key={crime.id}
-                            coordinate={{ latitude: crime.lat, longitude: crime.lng }}
-                        >
-                            <View style={[styles.crimeMarker, { 
-                                backgroundColor: crime.severity > 0.7 ? '#e74c3c' : '#f39c12' 
-                            }]}>
-                                <Text style={styles.crimeEmoji}>⚠️</Text>
-                            </View>
-                        </Marker>
-                    ))}
-
-                    {/* Well-lit areas */}
-                    {wellLitAreas.map((area) => (
-                        <Circle
-                            key={area.id}
-                            center={{ latitude: area.lat, longitude: area.lng }}
-                            radius={area.radius}
-                            strokeColor="rgba(46, 204, 113, 0.5)"
-                            fillColor="rgba(46, 204, 113, 0.2)"
-                        />
-                    ))}
-
-                    {/* Sample safe route (green line) */}
+                {/* Route Line */}
+                {routeCoordinates.length > 0 && (
                     <Polyline
-                        coordinates={[
-                            { latitude: location.latitude, longitude: location.longitude },
-                            { latitude: location.latitude + 0.01, longitude: location.longitude + 0.01 },
-                            { latitude: location.latitude + 0.02, longitude: location.longitude + 0.015 },
-                        ]}
+                        coordinates={routeCoordinates}
                         strokeColor="#2ecc71"
                         strokeWidth={5}
                     />
+                )}
+            </MapView>
 
-                    {/* Sample unsafe route (red line) */}
-                    <Polyline
-                        coordinates={[
-                            { latitude: location.latitude, longitude: location.longitude },
-                            { latitude: location.latitude - 0.005, longitude: location.longitude - 0.01 },
-                            { latitude: location.latitude - 0.015, longitude: location.longitude - 0.02 },
-                        ]}
-                        strokeColor="#e74c3c"
-                        strokeWidth={4}
-                        lineDashPattern={[5, 5]}
-                    />
-                </MapView>
+            {/* Loading Overlay */}
+            {loading && (
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color="#e74c3c" />
+                    <Text style={styles.loadingText}>Finding safest route...</Text>
+                </View>
             )}
 
             {/* Search Bar */}
@@ -222,134 +248,75 @@ export default function MapScreen() {
                     <Ionicons name="search" size={20} color="#7f8c8d" />
                     <TextInput
                         style={styles.searchInput}
-                        placeholder="Enter destination..."
+                        placeholder="Search for a city or place..."
                         placeholderTextColor="#95a5a6"
                         value={destination}
-                        onChangeText={setDestination}
-                        onSubmitEditing={handleSearch}
+                        onChangeText={searchLocation}
+                        onFocus={() => setShowSearch(true)}
                     />
                     {destination.length > 0 && (
-                        <TouchableOpacity onPress={() => setDestination('')}>
+                        <TouchableOpacity onPress={clearRoute}>
                             <Ionicons name="close-circle" size={20} color="#95a5a6" />
                         </TouchableOpacity>
                     )}
                 </View>
-            </View>
 
-            {/* Recent Searches */}
-            {!showRouteOptions && (
-                <View style={styles.recentContainer}>
-                    <Text style={styles.recentTitle}>Recent Places</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        {recentSearches.map((item, index) => (
+                {/* Search Results Dropdown */}
+                {showSearch && searchResults.length > 0 && (
+                    <ScrollView style={styles.resultsContainer}>
+                        {searchResults.map((item, index) => (
                             <TouchableOpacity
                                 key={index}
-                                style={styles.recentChip}
-                                onPress={() => {
-                                    setDestination(item);
-                                    handleSearch();
-                                }}
+                                style={styles.resultItem}
+                                onPress={() => selectLocation(item)}
                             >
-                                <Ionicons name="time-outline" size={16} color="#7f8c8d" />
-                                <Text style={styles.recentChipText}>{item}</Text>
+                                <Ionicons name="location" size={16} color="#e74c3c" />
+                                <Text style={styles.resultText}>{item.display_name}</Text>
                             </TouchableOpacity>
                         ))}
                     </ScrollView>
-                </View>
-            )}
-
-            {/* Legend */}
-            <View style={styles.legendContainer}>
-                <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: '#2ecc71' }]} />
-                    <Text style={styles.legendText}>Safe</Text>
-                </View>
-                <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: '#f39c12' }]} />
-                    <Text style={styles.legendText}>Caution</Text>
-                </View>
-                <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: '#e74c3c' }]} />
-                    <Text style={styles.legendText}>Avoid</Text>
-                </View>
-                <View style={styles.legendItem}>
-                    <View style={[styles.legendDot, { backgroundColor: '#3498db' }]} />
-                    <Text style={styles.legendText}>Well-lit</Text>
-                </View>
+                )}
             </View>
 
-            {/* Route Options (Slide-up Panel) */}
-            {showRouteOptions && (
-                <Animated.View style={[
-                    styles.routePanel,
-                    {
-                        transform: [{
-                            translateY: slideAnim.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [300, 0]
-                            })
-                        }]
-                    }
-                ]}>
-                    <View style={styles.panelHeader}>
-                        <View style={styles.panelDrag} />
-                        <Text style={styles.panelTitle}>Select Your Route</Text>
-                        <TouchableOpacity onPress={() => setShowRouteOptions(false)}>
-                            <Ionicons name="close" size={24} color="#7f8c8d" />
-                        </TouchableOpacity>
+            {/* Distance/Duration Card */}
+            {distance && duration && (
+                <View style={styles.infoCard}>
+                    <View style={styles.infoHeader}>
+                        <Ionicons name="shield-checkmark" size={24} color="#2ecc71" />
+                        <Text style={styles.infoTitle}>Safe Route Found</Text>
                     </View>
-
-                    <ScrollView showsVerticalScrollIndicator={false}>
-                        {routeOptions.map((route) => (
-                            <TouchableOpacity
-                                key={route.id}
-                                style={[
-                                    styles.routeCard,
-                                    selectedRoute === route.id && styles.routeCardSelected
-                                ]}
-                                onPress={() => selectRoute(route)}
-                            >
-                                <View style={styles.routeHeader}>
-                                    <Text style={styles.routeName}>{route.name}</Text>
-                                    <View style={[styles.safetyBadge, { backgroundColor: getSafetyColor(route.safety) }]}>
-                                        <Text style={styles.safetyText}>{route.safety}%</Text>
-                                    </View>
-                                </View>
-
-                                <Text style={styles.routeDesc}>{route.description}</Text>
-
-                                <View style={styles.routeDetails}>
-                                    <View style={styles.routeDetailItem}>
-                                        <Ionicons name="map-outline" size={16} color="#7f8c8d" />
-                                        <Text style={styles.routeDetailText}>{route.distance}</Text>
-                                    </View>
-                                    <View style={styles.routeDetailItem}>
-                                        <Ionicons name="time-outline" size={16} color="#7f8c8d" />
-                                        <Text style={styles.routeDetailText}>{route.time}</Text>
-                                    </View>
-                                </View>
-
-                                <LinearGradient
-                                    colors={[route.color + '20', route.color + '40']}
-                                    style={styles.routePreview}
-                                >
-                                    <Text style={[styles.routePreviewText, { color: route.color }]}>
-                                        Tap to select this route
-                                    </Text>
-                                </LinearGradient>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
-                </Animated.View>
+                    <View style={styles.infoRow}>
+                        <Ionicons name="map-outline" size={20} color="#3498db" />
+                        <Text style={styles.infoText}>Distance: {distance}</Text>
+                    </View>
+                    <View style={styles.infoRow}>
+                        <Ionicons name="time-outline" size={20} color="#e74c3c" />
+                        <Text style={styles.infoText}>Duration: {duration}</Text>
+                    </View>
+                    <View style={styles.safetyBadge}>
+                        <Ionicons name="flash" size={16} color="white" />
+                        <Text style={styles.safetyText}>Safety Score: 92%</Text>
+                    </View>
+                </View>
             )}
 
             {/* Current Location Button */}
             <TouchableOpacity 
-                style={styles.locationButton}
-                onPress={getLocation}
-            >
-                <Ionicons name="locate" size={24} color="#e74c3c" />
-            </TouchableOpacity>
+    style={styles.locationButton}
+    onPress={() => {
+        getLocation();
+        if (location && mapRef.current) {
+            mapRef.current.animateToRegion({
+                latitude: location.latitude,
+                longitude: location.longitude,
+                latitudeDelta: 0.0922,
+                longitudeDelta: 0.0421,
+            }, 1000); // 1000ms = 1 second animation
+        }
+    }}
+>
+    <Ionicons name="locate" size={24} color="#e74c3c" />
+</TouchableOpacity>
         </View>
     );
 }
@@ -358,6 +325,11 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f5f5f5',
+    },
+    centerContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     map: {
         flex: 1,
@@ -388,173 +360,88 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#2c3e50',
     },
-    recentContainer: {
-        position: 'absolute',
-        top: 80,
-        left: 20,
-        right: 20,
-        zIndex: 10,
+    resultsContainer: {
+        backgroundColor: 'white',
+        borderRadius: 10,
+        marginTop: 5,
+        maxHeight: 200,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
     },
-    recentTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: '#7f8c8d',
-        marginBottom: 8,
-        marginLeft: 5,
-    },
-    recentChip: {
+    resultItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: 'white',
-        paddingHorizontal: 15,
-        paddingVertical: 8,
-        borderRadius: 20,
-        marginRight: 10,
-        gap: 5,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.05,
-        shadowRadius: 3,
-        elevation: 2,
+        padding: 15,
+        borderBottomWidth: 1,
+        borderBottomColor: '#ecf0f1',
+        gap: 10,
     },
-    recentChipText: {
+    resultText: {
+        flex: 1,
         fontSize: 14,
         color: '#34495e',
     },
-    legendContainer: {
+    infoCard: {
         position: 'absolute',
-        bottom: 20,
+        bottom: 100,
         left: 20,
-        flexDirection: 'row',
+        right: 20,
         backgroundColor: 'white',
-        padding: 10,
-        borderRadius: 25,
+        borderRadius: 15,
+        padding: 15,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 5,
-        zIndex: 10,
-        flexWrap: 'wrap',
-        maxWidth: width - 40,
+        zIndex: 5,
     },
-    legendItem: {
+    infoHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginHorizontal: 6,
-        gap: 4,
-    },
-    legendDot: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-    },
-    legendText: {
-        fontSize: 10,
-        color: '#34495e',
-    },
-    routePanel: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: 'white',
-        borderTopLeftRadius: 30,
-        borderTopRightRadius: 30,
-        paddingHorizontal: 20,
-        paddingTop: 10,
-        paddingBottom: 30,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -3 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
-        elevation: 20,
-        maxHeight: '60%',
-    },
-    panelHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 15,
-        paddingTop: 5,
-    },
-    panelDrag: {
-        width: 40,
-        height: 4,
-        backgroundColor: '#ecf0f1',
-        borderRadius: 2,
-        alignSelf: 'center',
+        gap: 10,
         marginBottom: 10,
+        paddingBottom: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#ecf0f1',
     },
-    panelTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#2c3e50',
-    },
-    routeCard: {
-        backgroundColor: '#f8f9fa',
-        borderRadius: 15,
-        padding: 15,
-        marginBottom: 12,
-        borderWidth: 2,
-        borderColor: 'transparent',
-    },
-    routeCardSelected: {
-        borderColor: '#e74c3c',
-        backgroundColor: '#fff5f5',
-    },
-    routeHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 8,
-    },
-    routeName: {
+    infoTitle: {
         fontSize: 16,
         fontWeight: 'bold',
+        color: '#2ecc71',
+    },
+    infoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingVertical: 5,
+    },
+    infoText: {
+        fontSize: 16,
         color: '#2c3e50',
     },
     safetyBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        backgroundColor: '#2ecc71',
         paddingHorizontal: 10,
-        paddingVertical: 3,
-        borderRadius: 12,
+        paddingVertical: 5,
+        borderRadius: 15,
+        alignSelf: 'flex-start',
+        marginTop: 10,
     },
     safetyText: {
         color: 'white',
         fontSize: 12,
         fontWeight: 'bold',
     },
-    routeDesc: {
-        fontSize: 13,
-        color: '#7f8c8d',
-        marginBottom: 10,
-    },
-    routeDetails: {
-        flexDirection: 'row',
-        gap: 15,
-        marginBottom: 10,
-    },
-    routeDetailItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 5,
-    },
-    routeDetailText: {
-        fontSize: 13,
-        color: '#34495e',
-    },
-    routePreview: {
-        padding: 10,
-        borderRadius: 10,
-        alignItems: 'center',
-    },
-    routePreviewText: {
-        fontSize: 12,
-        fontWeight: '600',
-    },
     locationButton: {
         position: 'absolute',
-        bottom: 90,
+        bottom: 30,
         right: 20,
         backgroundColor: 'white',
         width: 50,
@@ -569,23 +456,29 @@ const styles = StyleSheet.create({
         elevation: 5,
         zIndex: 10,
     },
-    userMarker: {
-        backgroundColor: '#3498db',
+    marker: {
         borderRadius: 20,
         padding: 5,
         borderWidth: 2,
         borderColor: 'white',
     },
-    userMarkerText: {
+    markerText: {
         fontSize: 20,
     },
-    crimeMarker: {
-        borderRadius: 15,
-        padding: 5,
-        borderWidth: 2,
-        borderColor: 'white',
+    loadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(255,255,255,0.8)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 20,
     },
-    crimeEmoji: {
-        fontSize: 14,
+    loadingText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: '#34495e',
     },
 });

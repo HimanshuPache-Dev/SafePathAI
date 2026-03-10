@@ -102,7 +102,7 @@ export default function OnboardingScreen() {
             ]}>
                 <TouchableOpacity
                     style={styles.getStartedButton}
-                    onPress={() => router.push('/permissions')}
+                    onPress={() => router.push('/register')} 
                     activeOpacity={0.8}
                 >
                     <LinearGradient
