@@ -1,52 +1,45 @@
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as Location from 'expo-location';
-import { router } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
-  Alert,
-  Animated,
-  Dimensions,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  Vibration,
-  View
+    View,
+    Text,
+    StyleSheet,
+    TouchableOpacity,
+    ScrollView,
+    Dimensions,
+    Animated,
+    Vibration,
+    Alert
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import MapView, { Marker } from 'react-native-maps';
+import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width } = Dimensions.get('window');
 
-interface LocationData {
-    latitude: number;
-    longitude: number;
-}
-
-interface QuickActionProps {
-    icon: string;
-    label: string;
-    route: "/map" | "/sos" | "/privacy" | "/explore";
-    color: string;
-}
-
 export default function HomeScreen() {
-    const [userName, setUserName] = useState('Priya');
+    const [userName, setUserName] = useState('User');
     const [safetyScore, setSafetyScore] = useState(92);
-    const [scoreTrend, setScoreTrend] = useState('+12');
-    const [isTracking, setIsTracking] = useState(true);
-    const [location, setLocation] = useState<LocationData | null>(null);
-    const [nearbyPlaces, setNearbyPlaces] = useState([
-        { id: '1', name: 'Police Station', distance: '200m', icon: '👮', color: '#3498db' },
-        { id: '2', name: 'Hospital', distance: '500m', icon: '🏥', color: '#e74c3c' },
-        { id: '3', name: '24/7 Store', distance: '300m', icon: '🏪', color: '#f39c12' },
-    ]);
-
+    const [scoreTrend] = useState('+12');
+    const [isTracking] = useState(true);
+    const [location, setLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+    
     // Animation values
     const pulseAnim = useRef(new Animated.Value(1)).current;
     const slideAnim = useRef(new Animated.Value(0)).current;
 
+    const nearbyPlaces = [
+        { id: '1', name: 'Police Station', distance: '200m', icon: '👮', color: '#3498db' },
+        { id: '2', name: 'Hospital', distance: '500m', icon: '🏥', color: '#e74c3c' },
+        { id: '3', name: '24/7 Store', distance: '300m', icon: '🏪', color: '#f39c12' },
+    ];
+
     useEffect(() => {
+        // Load user name
+        loadUserName();
+        
         // Start SOS button pulse animation
         Animated.loop(
             Animated.sequence([
@@ -63,7 +56,7 @@ export default function HomeScreen() {
             ])
         ).start();
 
-        // Slide in animation for cards
+        // Slide in animation
         Animated.spring(slideAnim, {
             toValue: 1,
             tension: 50,
@@ -73,6 +66,15 @@ export default function HomeScreen() {
 
         getLocation();
     }, []);
+
+    const loadUserName = async () => {
+        try {
+            const name = await AsyncStorage.getItem('userName');
+            if (name) setUserName(name);
+        } catch (error) {
+            console.log('Error loading name');
+        }
+    };
 
     const getLocation = async () => {
         try {
@@ -107,10 +109,10 @@ export default function HomeScreen() {
         );
     };
 
-    const QuickAction = ({ icon, label, route, color }: QuickActionProps) => (
+    const QuickAction = ({ icon, label, route, color }: { icon: string; label: string; route: string; color: string }) => (
         <TouchableOpacity 
             style={styles.quickAction}
-            onPress={() => router.push(route)}
+            onPress={() => router.push(route as any)}
         >
             <LinearGradient
                 colors={[color + '20', color + '40']}
@@ -155,19 +157,13 @@ export default function HomeScreen() {
             </LinearGradient>
 
             {/* Status Card */}
-            <Animated.View 
-                style={[
-                    styles.statusCard,
-                    {
-                        transform: [
-                            { translateY: slideAnim.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [50, 0]
-                            })}
-                        ]
-                    }
-                ]}
-            >
+            <Animated.View style={[
+                styles.statusCard,
+                { transform: [{ translateY: slideAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [50, 0]
+                })}]}
+            ]}>
                 <View style={styles.statusHeader}>
                     <View style={styles.statusTitleContainer}>
                         <View style={styles.statusDot} />
@@ -214,9 +210,9 @@ export default function HomeScreen() {
                 <Text style={styles.sectionTitle}>Quick Actions</Text>
                 <View style={styles.quickActionsGrid}>
                     <QuickAction icon="📍" label="Safe Route" route="/map" color="#3498db" />
-                    <QuickAction icon="👥" label="Trusted" route="/explore" color="#9b59b6" />
+                    <QuickAction icon="👥" label="Contacts" route="/contacts" color="#9b59b6" />
                     <QuickAction icon="🔊" label="Scream Test" route="/sos" color="#e67e22" />
-                    <QuickAction icon="🛡️" label="Digital Scan" route="/privacy" color="#2ecc71" />
+                    <QuickAction icon="🛡️" label="Privacy" route="/privacy" color="#2ecc71" />
                 </View>
             </View>
 
@@ -279,7 +275,7 @@ export default function HomeScreen() {
             {/* Safety Tips */}
             <View style={styles.tipsContainer}>
                 <Text style={styles.sectionTitle}>Safety Tips</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tipsScroll}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                     <View style={styles.tipCard}>
                         <Text style={styles.tipIcon}>🌙</Text>
                         <Text style={styles.tipTitle}>Night Walk</Text>
@@ -294,6 +290,11 @@ export default function HomeScreen() {
                         <Text style={styles.tipIcon}>👥</Text>
                         <Text style={styles.tipTitle}>Share Location</Text>
                         <Text style={styles.tipText}>Keep contacts updated</Text>
+                    </View>
+                    <View style={styles.tipCard}>
+                        <Text style={styles.tipIcon}>🔋</Text>
+                        <Text style={styles.tipTitle}>Battery</Text>
+                        <Text style={styles.tipText}>Keep phone charged</Text>
                     </View>
                 </ScrollView>
             </View>
@@ -573,9 +574,6 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         marginTop: 25,
         marginBottom: 30,
-    },
-    tipsScroll: {
-        flexDirection: 'row',
     },
     tipCard: {
         backgroundColor: 'white',
