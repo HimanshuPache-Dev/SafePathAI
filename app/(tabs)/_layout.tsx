@@ -1,13 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import React from 'react';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const colorScheme = useColorScheme() as 'light' | 'dark';
 
   return (
     <Tabs
@@ -34,7 +33,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
             <Ionicons 
               name={focused ? "home" : "home-outline"} 
               size={24} 
@@ -49,7 +48,7 @@ export default function TabLayout() {
         name="map"
         options={{
           title: 'Map',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
             <Ionicons 
               name={focused ? "map" : "map-outline"} 
               size={24} 
@@ -64,7 +63,7 @@ export default function TabLayout() {
         name="sos"
         options={{
           title: 'SOS',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
             <Ionicons 
               name={focused ? "alert-circle" : "alert-circle-outline"} 
               size={24} 
@@ -80,12 +79,27 @@ export default function TabLayout() {
         }}
       />
       
+      {/* Contacts Tab - Added correctly without comment */}
+      <Tabs.Screen
+        name="contacts"
+        options={{
+          title: 'Contacts',
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
+            <Ionicons 
+              name={focused ? "people" : "people-outline"} 
+              size={24} 
+              color={color} 
+            />
+          ),
+        }}
+      />
+      
       {/* Privacy Tab */}
       <Tabs.Screen
         name="privacy"
         options={{
           title: 'Privacy',
-          tabBarIcon: ({ color, focused }) => (
+          tabBarIcon: ({ color, focused }: { color: string; focused: boolean }) => (
             <Ionicons 
               name={focused ? "shield" : "shield-outline"} 
               size={24} 
