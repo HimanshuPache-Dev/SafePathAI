@@ -49,23 +49,19 @@ export default function LoginScreen() {
             // Simulate API call
             await new Promise(resolve => setTimeout(resolve, 1500));
 
-            if (isLogin) {
-                // Login logic
-                await AsyncStorage.setItem('userEmail', email);
-                await AsyncStorage.setItem('isLoggedIn', 'true');
-                
-                Alert.alert('Success', 'Logged in successfully!');
-                router.replace('/(tabs)'); // Go to main app
-            } else {
-                // Signup logic
-                await AsyncStorage.setItem('userEmail', email);
-                await AsyncStorage.setItem('userName', name);
-                await AsyncStorage.setItem('userPhone', phone || '');
-                await AsyncStorage.setItem('isLoggedIn', 'true');
-                
-                Alert.alert('Success', 'Account created successfully!');
-                router.replace('/(tabs)'); // Go to main app
-            }
+            // Save user data
+            await AsyncStorage.setItem('userEmail', email);
+            await AsyncStorage.setItem('userName', name || email.split('@')[0]);
+            await AsyncStorage.setItem('userPhone', phone || '');
+            await AsyncStorage.setItem('isLoggedIn', 'true');
+            
+            // ✅ AUTO-LOGIN - No need to login again
+            Alert.alert(
+                'Success', 
+                isLogin ? 'Logged in successfully!' : 'Account created successfully!',
+                [{ text: 'OK', onPress: () => router.replace('/(tabs)') }]
+            );
+            
         } catch (error) {
             Alert.alert('Error', 'Authentication failed. Please try again.');
         } finally {
@@ -73,17 +69,16 @@ export default function LoginScreen() {
         }
     };
 
-    const handleSocialLogin = (provider: string) => {
-        Alert.alert('Coming Soon', `${provider} login will be available soon!`);
-    };
+    // Check if already logged in
+    React.useEffect(() => {
+        checkLoginStatus();
+    }, []);
 
-    const toggleMode = () => {
-        setIsLogin(!isLogin);
-        setEmail('');
-        setPassword('');
-        setConfirmPassword('');
-        setName('');
-        setPhone('');
+    const checkLoginStatus = async () => {
+        const loggedIn = await AsyncStorage.getItem('isLoggedIn');
+        if (loggedIn === 'true') {
+            router.replace('/(tabs)');
+        }
     };
 
     return (
@@ -222,37 +217,12 @@ export default function LoginScreen() {
                             )}
                         </TouchableOpacity>
 
-                        {/* Social Login */}
-                        <View style={styles.socialContainer}>
-                            <Text style={styles.socialText}>Or continue with</Text>
-                            <View style={styles.socialButtons}>
-                                <TouchableOpacity 
-                                    style={styles.socialButton}
-                                    onPress={() => handleSocialLogin('Google')}
-                                >
-                                    <Ionicons name="logo-google" size={24} color="#DB4437" />
-                                </TouchableOpacity>
-                                <TouchableOpacity 
-                                    style={styles.socialButton}
-                                    onPress={() => handleSocialLogin('Facebook')}
-                                >
-                                    <Ionicons name="logo-facebook" size={24} color="#4267B2" />
-                                </TouchableOpacity>
-                                <TouchableOpacity 
-                                    style={styles.socialButton}
-                                    onPress={() => handleSocialLogin('Apple')}
-                                >
-                                    <Ionicons name="logo-apple" size={24} color="white" />
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-
                         {/* Toggle between Login/Signup */}
                         <View style={styles.toggleContainer}>
                             <Text style={styles.toggleText}>
                                 {isLogin ? "Don't have an account? " : "Already have an account? "}
                             </Text>
-                            <TouchableOpacity onPress={toggleMode}>
+                            <TouchableOpacity onPress={() => setIsLogin(!isLogin)}>
                                 <Text style={styles.toggleLink}>
                                     {isLogin ? 'Sign Up' : 'Sign In'}
                                 </Text>
@@ -319,7 +289,6 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255,255,255,0.1)',
         borderRadius: 20,
         padding: 20,
-        backdropFilter: 'blur(10px)',
     },
     inputContainer: {
         flexDirection: 'row',
@@ -363,30 +332,6 @@ const styles = StyleSheet.create({
         color: 'white',
         fontSize: 18,
         fontWeight: 'bold',
-    },
-    socialContainer: {
-        alignItems: 'center',
-        marginBottom: 20,
-    },
-    socialText: {
-        color: 'rgba(255,255,255,0.5)',
-        fontSize: 14,
-        marginBottom: 15,
-    },
-    socialButtons: {
-        flexDirection: 'row',
-        justifyContent: 'center',
-        gap: 20,
-    },
-    socialButton: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        backgroundColor: 'rgba(255,255,255,0.05)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.1)',
     },
     toggleContainer: {
         flexDirection: 'row',
