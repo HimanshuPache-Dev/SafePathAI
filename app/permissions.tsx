@@ -13,8 +13,7 @@ import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
-    Linking
+    View
 } from 'react-native';
 
 interface Permission {
@@ -93,11 +92,7 @@ export default function PermissionsScreen() {
             } else {
                 Alert.alert(
                     '⚠️ Permission Required',
-                    `${permission.title} is ${permission.required ? 'required' : 'recommended'} for app functionality. You can enable it later in settings.`,
-                    [
-                        { text: 'Cancel', style: 'cancel' },
-                        { text: 'Settings', onPress: () => Linking.openSettings() }
-                    ]
+                    `${permission.title} is ${permission.required ? 'required' : 'recommended'} for app functionality.`
                 );
             }
         } catch (error) {
@@ -111,7 +106,6 @@ export default function PermissionsScreen() {
                 p.id === id ? { ...p, granted } : p
             );
             
-            // Calculate progress
             const grantedCount = updated.filter(p => p.granted).length;
             const totalRequired = updated.filter(p => p.required).length;
             const progressValue = (grantedCount / totalRequired) * 100;
@@ -127,22 +121,13 @@ export default function PermissionsScreen() {
             .every(p => p.granted);
 
         if (requiredGranted) {
-            router.push('/explore');
+            router.replace('/(tabs)');
         } else {
             Alert.alert(
                 '⚠️ Permissions Needed',
-                'Please grant all required permissions to continue',
-                [{ text: 'OK' }]
+                'Please grant all required permissions to continue'
             );
         }
-    };
-
-    const grantAll = () => {
-        permissions.forEach(p => {
-            if (!p.granted) {
-                requestPermission(p);
-            }
-        });
     };
 
     return (
@@ -157,7 +142,7 @@ export default function PermissionsScreen() {
                 <TouchableOpacity onPress={() => router.back()}>
                     <Ionicons name="arrow-back" size={24} color="white" />
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => router.push('/explore')}>
+                <TouchableOpacity onPress={() => router.replace('/(tabs)')}>
                     <Text style={styles.skipText}>Skip</Text>
                 </TouchableOpacity>
             </View>
@@ -179,10 +164,7 @@ export default function PermissionsScreen() {
             </View>
 
             {/* Permissions List */}
-            <ScrollView 
-                style={styles.scrollView}
-                showsVerticalScrollIndicator={false}
-            >
+            <ScrollView style={styles.scrollView}>
                 {permissions.map((perm) => (
                     <View key={perm.id} style={styles.permissionCard}>
                         <View style={styles.permissionHeader}>
@@ -203,20 +185,6 @@ export default function PermissionsScreen() {
                         </View>
 
                         <View style={styles.permissionFooter}>
-                            <TouchableOpacity
-                                style={styles.whyButton}
-                                onPress={() => Alert.alert(
-                                    `Why we need ${perm.title}`,
-                                    `${perm.description}. This helps us ${perm.id === 'location' ? 'guide you safely' : 
-                                      perm.id === 'microphone' ? 'detect emergencies' :
-                                      perm.id === 'notifications' ? 'alert you instantly' :
-                                      'notify your trusted contacts'}`
-                                )}
-                            >
-                                <Ionicons name="help-circle-outline" size={18} color="#e74c3c" />
-                                <Text style={styles.whyText}>Why?</Text>
-                            </TouchableOpacity>
-
                             {perm.granted ? (
                                 <View style={styles.grantedBadge}>
                                     <Ionicons name="checkmark-circle" size={24} color="#4ade80" />
@@ -235,28 +203,19 @@ export default function PermissionsScreen() {
                 ))}
             </ScrollView>
 
-            {/* Bottom Buttons */}
-            <View style={styles.bottomContainer}>
-                <TouchableOpacity
-                    style={styles.grantAllButton}
-                    onPress={grantAll}
-                >
-                    <Text style={styles.grantAllText}>Enable All</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={[
-                        styles.continueButton,
-                        progress === 100 ? styles.continueActive : styles.continueInactive
-                    ]}
-                    onPress={handleContinue}
-                    disabled={progress < 100}
-                >
-                    <Text style={styles.continueText}>
-                        {progress === 100 ? 'Continue →' : 'Grant all permissions'}
-                    </Text>
-                </TouchableOpacity>
-            </View>
+            {/* Continue Button */}
+            <TouchableOpacity
+                style={[
+                    styles.continueButton,
+                    progress === 100 ? styles.continueActive : styles.continueInactive
+                ]}
+                onPress={handleContinue}
+                disabled={progress < 100}
+            >
+                <Text style={styles.continueText}>
+                    {progress === 100 ? 'Continue →' : 'Grant all permissions'}
+                </Text>
+            </TouchableOpacity>
         </LinearGradient>
     );
 }
@@ -266,6 +225,7 @@ const styles = StyleSheet.create({
         flex: 1,
         paddingHorizontal: 20,
         paddingTop: 50,
+        paddingBottom: 30,
     },
     header: {
         flexDirection: 'row',
@@ -318,8 +278,6 @@ const styles = StyleSheet.create({
         borderRadius: 15,
         padding: 15,
         marginBottom: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
     },
     permissionHeader: {
         flexDirection: 'row',
@@ -369,26 +327,16 @@ const styles = StyleSheet.create({
     },
     permissionFooter: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
+        justifyContent: 'flex-end',
         borderTopWidth: 1,
         borderTopColor: 'rgba(255,255,255,0.1)',
         paddingTop: 12,
     },
-    whyButton: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
-    },
-    whyText: {
-        color: '#e74c3c',
-        fontSize: 14,
-    },
     allowButton: {
         backgroundColor: '#e74c3c',
-        paddingHorizontal: 20,
-        paddingVertical: 8,
-        borderRadius: 15,
+        paddingHorizontal: 30,
+        paddingVertical: 10,
+        borderRadius: 20,
     },
     allowText: {
         color: 'white',
@@ -403,23 +351,6 @@ const styles = StyleSheet.create({
     grantedText: {
         color: '#4ade80',
         fontSize: 14,
-        fontWeight: 'bold',
-    },
-    bottomContainer: {
-        gap: 10,
-        marginBottom: 20,
-    },
-    grantAllButton: {
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        paddingVertical: 15,
-        borderRadius: 25,
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.2)',
-    },
-    grantAllText: {
-        color: 'white',
-        fontSize: 16,
         fontWeight: 'bold',
     },
     continueButton: {

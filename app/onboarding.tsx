@@ -115,7 +115,7 @@ export default function OnboardingScreen() {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    onPress={() => router.push('/permissions')}
+                    onPress={() => router.push('/login')}
                     style={styles.signInButton}
                 >
                     <Text style={styles.signInText}>
